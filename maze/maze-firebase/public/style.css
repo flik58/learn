@@ -1,0 +1,20 @@
+body {
+  padding: 8px;
+  font-family: Helvetica;
+}
+
+.player {
+  border: 1px #000 solid;
+  border-radius: 100px;
+  position: absolute;
+}
+
+#buttons {
+  touch-action: manipulation;
+  padding: 16px;
+}
+
+.button {
+  width: 60px;
+  height: 60px
+}
