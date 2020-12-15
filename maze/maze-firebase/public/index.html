@@ -1,0 +1,56 @@
+<html lang="en">
+  <head>
+  <meta carset="utf-8">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Cache-Control" content="no-cache">
+
+    <title>Maze</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="http://code.jquery.com/jquery-3.3.1.min.js" defer></script>
+  </head>
+  <body>
+    <div style='position:absolute' id=players>
+  </div>
+  <table>
+    <TR>
+      <TD>
+        <canvas id="canvas" style="border:1px solid #000000;">
+        </canvas>
+        <div id=buttons>
+          <center>
+            <table>
+              <TR>
+                <TD></td>
+                <TD>
+                  <center> <input type=button class=button value="Up" onclick="goUp()"></center>
+                </td>
+                <TD>
+                </td>
+              </tr>
+              <TR>
+                <TD>
+                  <input type=button class=button value="Left" onclick="goLeft()"></td>
+                <TD>
+                  <input type=button class=button value="Down" onclick="goDown()">
+                </td>
+                <TD>
+                  <input type=button class=button value="Right" onclick="goRight()">
+                </td>
+              </tr>
+            </table>
+          </center>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <script src="/__/firebase/8.1.1/firebase-app.js"></script>
+  <script src="/__/firebase/7.24.0/firebase-auth.js"></script>
+  <script src="/__/firebase/7.24.0/firebase-database.js"></script>
+  <script src="/__/firebase/7.24.0/firebase-firestore.js"></script>
+  <!-- Initialize Firebase -->
+  <script src="/__/firebase/init.js"></script>
+
+  <!-- <script src="./maze.js" type="module"></script> -->
+  <script src="./app.js" type="module"></script>
+  </body>
+</html>
