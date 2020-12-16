@@ -77,9 +77,49 @@ const slow = (number, difference) => {
   return number + difference;
 };
 
+function newPostForCurrentUser(title, text) {
+  // [START single_value_read]
+  var userId = firebase.auth().currentUser.uid;
+  return firebase.database().ref('/users/' + userId).once('value').then(function(snapshot) {
+    var username = (snapshot.val() && snapshot.val().username) || 'Anonymous';
+    // [START_EXCLUDE]
+    return writeNewPost(firebase.auth().currentUser.uid, username,
+                        firebase.auth().currentUser.photoURL);
+  });
+}
+
+function writeNewPlayer(uid, username, picture) {
+  // A post entry.
+  // var postData = {
+  //   author: username,
+  //   uid: uid,
+  //   authorPic: picture
+  // };
+
+  // Get a key for a new Post.
+  // var newPostKey = firebase.database().ref().child('posts').push().key;
+
+  // Write the new post's data simultaneously in the posts list and the user's post list.
+  var updates = {};
+  // updates['/players/' + uid + '/' + 'balls'] = postData;
+  updates['/players/' + uid + '/' + 'balls'] = [
+    {column: 0, row: 0},
+    {column: 9, row: 0},
+    {column: 0, row: 8},
+    {column: 0, row: 8}
+  ];
+
+  return firebase.database().ref().update(updates);
+}
+
 const mazeElement = document.getElementById("maze");
 const joystickHeadElement = document.getElementById("joystick-head");
 const noteElement = document.getElementById("note"); // Note element for instructions and game won, game failed texts
+
+// realtime database
+var uid = 'aaaa';
+const playersRef = firebase.database().ref('/players');
+const ballsRef = firebase.database().ref('/players/player' + uid + '/balls');
 
 let hardMode = false;
 let previousTimestamp;
@@ -101,6 +141,8 @@ const debugMode = true; //false;
 let balls = [];
 let ballElements = [];
 let holeElements = [];
+
+const FPS = (debugMode === true) ?  5 : 45; // Frame rate
 
 resetGame();
 
@@ -349,6 +391,10 @@ function resetGame() {
     velocityY: 0
   }));
 
+  ballsRef.transaction(function(post) {
+    return balls;
+  });
+
   if (ballElements.length) {
     balls.forEach(({ x, y }, index) => {
       ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
@@ -380,11 +426,14 @@ function main(timestamp) {
 
   if (previousTimestamp === undefined) {
     previousTimestamp = timestamp;
-    window.requestAnimationFrame(main);
+
+    setTimeout(() => {
+      window.requestAnimationFrame(main);
+    }, 1000 / FPS);
     return;
   }
 
-  const maxVelocity = 1.5;
+  const maxVelocity = (debugMode === true) ? 7.5 : 1.5;
 
   // Time passed since last cycle divided by 16
   // This function gets called every 16 ms on average so dividing by 16 will result in 1
@@ -405,7 +454,7 @@ function main(timestamp) {
           ball.velocityX = slow(ball.velocityX, frictionDeltaX);
         } else {
           ball.velocityX = ball.velocityX + velocityChangeX;
-          ball.velocityX = Math.max(Math.min(ball.velocityX, 1.5), -1.5);
+          ball.velocityX = Math.max(Math.min(ball.velocityX, maxVelocity), -maxVelocity);
           ball.velocityX =
             ball.velocityX - Math.sign(velocityChangeX) * frictionDeltaX;
           ball.velocityX = Math.minmax(ball.velocityX, maxVelocity);
@@ -640,25 +689,41 @@ function main(timestamp) {
         ball.y = ball.y + ball.velocityY;
       });
 
+      ballsRef.transaction(function(post) {
+        return balls;
+      });
+
       // Move balls to their new position on the UI
       balls.forEach(({ x, y }, index) => {
         ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
       });
     }
 
+    // Other players
+    playersRef.on('value', (snapshot) => {
+      let players = snapshot.val();
+
+      for (var uuid in players) {
+        if (uuid !== uid) {
+          console.log(players[uuid].balls);
+          players[uuid].balls.forEach(({ x, y }, index) => {
+            ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
+          });
+        }
+      }
+    });
+
     // Win detection
-    if (
-      balls.every(
-        (ball) => distance2D(ball, { x: 350 / 2, y: 315 / 2 }) < 65 / 2
-      )
-    ) {
+    if (balls.every((ball) => distance2D(ball, { x: 350 / 2, y: 315 / 2 }) < 65 / 2)) {
       noteElement.innerHTML = `Congrats, you did it!
         ${!hardMode && "<p>Press H for hard mode</p>"}`;
       noteElement.style.opacity = 1;
       gameInProgress = false;
     } else {
       previousTimestamp = timestamp;
-      window.requestAnimationFrame(main);
+      setTimeout(() => {
+        window.requestAnimationFrame(main);
+      }, 1000 / FPS);
     }
   } catch (error) {
     if (error.message == "The ball fell into a hole") {
