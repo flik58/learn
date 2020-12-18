@@ -112,14 +112,59 @@ function writeNewPlayer(uid, username, picture) {
   return firebase.database().ref().update(updates);
 }
 
+function otherPlayers() {
+  // Other players
+  playersRef.on('value', (snapshot) => {
+    let players = snapshot.val();
+
+    // players.forEach((uuid) => {
+    for (var uuid in players) {
+      if (uuid !== playerUid) {
+        // No exists player
+        if (playerList.indexOf(uuid) == -1) {
+          playerList.push(playerUid);
+
+          otherBalls.push(
+            { column: 0, row: 0 },
+            { column: 9, row: 0 },
+            { column: 0, row: 8 },
+            { column: 9, row: 8 }
+          );
+          otherBalls.map((ball) => ({
+            x: ball.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
+            y: ball.row * (wallW + pathW) + (wallW / 2 + pathW / 2),
+            velocityX: 0,
+            velocityY: 0
+          }));
+          otherBalls.forEach(({ x, y }) => {
+            const otherBall = document.createElement("div");
+            otherBall.setAttribute("class", "other-ball");
+            otherBall.style.cssText = `left: ${x}px; top: ${y}px; `;
+
+            mazeElement.appendChild(otherBall);
+            otherBallElements.push(otherBall);
+          });
+        }
+
+        // No player
+        playerList.forEach((player) => {
+          if (!players[player]) {
+            playerList = playerList.filter(n => n !== player);
+          }
+        });
+      }
+    }
+  });
+}
+
 const mazeElement = document.getElementById("maze");
 const joystickHeadElement = document.getElementById("joystick-head");
 const noteElement = document.getElementById("note"); // Note element for instructions and game won, game failed texts
 
 // realtime database
-var uid = 'aaaa';
+const playerUid = 'player' + Math.round(Math.random() * 1000000); //'aaaa';
 const playersRef = firebase.database().ref('/players');
-const ballsRef = firebase.database().ref('/players/player' + uid + '/balls');
+// const ballsRef = firebase.database().ref('/players/' + playerUid + '/balls');
 
 let hardMode = false;
 let previousTimestamp;
@@ -136,17 +181,42 @@ const wallW = 10; // Wall width
 const ballSize = 10; // Width and height of the ball
 const holeSize = 18;
 
-const debugMode = true; //false;
+const debugMode = false;
 
 let balls = [];
 let ballElements = [];
+let otherBallElements = [];
 let holeElements = [];
+let playerList = [];
 
-const FPS = (debugMode === true) ?  5 : 45; // Frame rate
+// const FPS = (debugMode === true) ?  15 : 45;
+const FPS = 45; // Frame rate
 
 resetGame();
 
-// Draw balls for the first time
+let otherBalls = [];
+// otherBalls = [
+//   { column: 0, row: 0 },
+//   // { column: 9, row: 0 },
+//   // { column: 0, row: 8 },
+//   // { column: 9, row: 8 }
+// ].map((ball) => ({
+//   x: ball.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
+//   y: ball.row * (wallW + pathW) + (wallW / 2 + pathW / 2),
+//   velocityX: 0,
+//   velocityY: 0
+// }));
+
+// // Draw balls for the first time
+// otherBalls.forEach(({ x, y }) => {
+//   const otherBall = document.createElement("div");
+//   otherBall.setAttribute("class", "other-ball");
+//   otherBall.style.cssText = `left: ${x}px; top: ${y}px; `;
+
+//   mazeElement.appendChild(otherBall);
+//   otherBallElements.push(otherBall);
+// });
+
 balls.forEach(({ x, y }) => {
   const ball = document.createElement("div");
   ball.setAttribute("class", "ball");
@@ -379,6 +449,16 @@ function resetGame() {
   }
   noteElement.style.opacity = 1;
 
+  // Delete player from DB
+  balls.forEach(({id}, index) => {
+    playersRef.child(id).remove().then(() => {
+      console.log(`remove player ${id}`);
+    }).catch(e => {
+      console.log(e);
+    });
+  });
+
+  // Reset
   balls = [
     { column: 0, row: 0 },
     { column: 9, row: 0 },
@@ -388,18 +468,24 @@ function resetGame() {
     x: ball.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
     y: ball.row * (wallW + pathW) + (wallW / 2 + pathW / 2),
     velocityX: 0,
-    velocityY: 0
+    velocityY: 0,
+    id : Math.round(Math.random() * 1000000)
+    // id: playerUid
   }));
-
-  ballsRef.transaction(function(post) {
-    return balls;
-  });
 
   if (ballElements.length) {
     balls.forEach(({ x, y }, index) => {
       ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
     });
   }
+
+  // otherPlayers()
+
+  // playersRef.child(playerUid).remove().then(() => {
+  //   console.log(`remove ${playerUid}`);
+  // }).catch(e => {
+  //   console.log(e);
+  // });
 
   // Remove previous hole elements
   holeElements.forEach((holeElement) => {
@@ -427,9 +513,9 @@ function main(timestamp) {
   if (previousTimestamp === undefined) {
     previousTimestamp = timestamp;
 
-    setTimeout(() => {
-      window.requestAnimationFrame(main);
-    }, 1000 / FPS);
+    // setTimeout(() => {
+    window.requestAnimationFrame(main);
+    // }, 1000 / FPS);
     return;
   }
 
@@ -438,6 +524,32 @@ function main(timestamp) {
   // Time passed since last cycle divided by 16
   // This function gets called every 16 ms on average so dividing by 16 will result in 1
   const timeElapsed = (timestamp - previousTimestamp) / 16;
+
+  // Move other players on the UI
+  playersRef.on('value', (snapshot) => {
+    let players = snapshot.val();
+
+    if (players === null) {return;}
+    // for (let i = 0; Object.keys(players).length; i++) {
+    Object.keys(players).forEach((player, index) => {
+      if (players[player].id === playerUid) {return;}
+
+      // if (index > otherBallElements.length){
+      if (index > Object.keys(otherBallElements).length) {
+        const otherBall = document.createElement("div");
+        otherBall.setAttribute("class", "other-ball");
+        otherBall.style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
+
+        mazeElement.appendChild(otherBall);
+        otherBallElements.push(otherBall);
+      }
+      if (otherBallElements[index] === undefined) {return;}
+      // if (parseInt(timestamp) % 16 === 0) {
+      otherBallElements[index].style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
+      // }
+    });
+  });
+
 
   try {
     // If mouse didn't move yet don't do anything
@@ -689,29 +801,24 @@ function main(timestamp) {
         ball.y = ball.y + ball.velocityY;
       });
 
-      ballsRef.transaction(function(post) {
-        return balls;
+      balls.forEach(({x, y, id}, index) => {
+        playersRef.child(id).set({
+          x: x,
+          y: y,
+          id: playerUid
+        });
       });
+
+      // ballsRef.transaction(function(post) {
+      // playersRef.transaction(function(post) {
+      // return balls;
+      // });
 
       // Move balls to their new position on the UI
       balls.forEach(({ x, y }, index) => {
         ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
       });
     }
-
-    // Other players
-    playersRef.on('value', (snapshot) => {
-      let players = snapshot.val();
-
-      for (var uuid in players) {
-        if (uuid !== uid) {
-          console.log(players[uuid].balls);
-          players[uuid].balls.forEach(({ x, y }, index) => {
-            ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
-          });
-        }
-      }
-    });
 
     // Win detection
     if (balls.every((ball) => distance2D(ball, { x: 350 / 2, y: 315 / 2 }) < 65 / 2)) {
@@ -721,9 +828,9 @@ function main(timestamp) {
       gameInProgress = false;
     } else {
       previousTimestamp = timestamp;
-      setTimeout(() => {
-        window.requestAnimationFrame(main);
-      }, 1000 / FPS);
+      // setTimeout(() => {
+      window.requestAnimationFrame(main);
+      // }, 1000 / FPS);
     }
   } catch (error) {
     if (error.message == "The ball fell into a hole") {
