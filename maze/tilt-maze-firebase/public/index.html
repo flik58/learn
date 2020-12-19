@@ -1,13 +1,24 @@
 <html lang="en">
   <head>
     <meta carset="utf-8">
+    <title>Maze</title>
+
+    <link rel="stylesheet" href="style.css">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Cache-Control" content="no-cache">
-
-    <title>Maze</title>
-    <link rel="stylesheet" href="style.css">
   </head>
   <body>
+    <div id="user-container">
+      <div hidden id="user-pic"></div>
+      <div hidden id="user-name"></div>
+      <button hidden id="sign-out">
+        Sign-out
+      </button>
+      <button hidden id="sign-in">
+        Sign-in with Google
+      </button>
+    </div>
+
     <div id="center">
       <div id="game">
         <div id="maze">
