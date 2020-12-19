@@ -1,12 +1,6 @@
 {
-  "database": {
-    "rules": "n"
-  },
-  "firestore": {
-    "rules": "n",
-    "indexes": "n"
-  },
   "hosting": {
+    "site": "test-neo",
     "public": "public",
     "ignore": [
       "firebase.json",

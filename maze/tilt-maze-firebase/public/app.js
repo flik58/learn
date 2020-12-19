@@ -1,81 +1,40 @@
+import {wallW, pathW, ballSize, holeSize, walls, holes} from "./items.js";
+import {distance2D, getAngle, closestItCanBe, rollAroundCap, slow} from "./config.js";
+
+
 Math.minmax = (value, limit) => {
   return Math.max(Math.min(value, limit), -limit);
 };
 
-const distance2D = (p1, p2) => {
-  return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
-};
+const mazeElement = document.getElementById("maze");
+const joystickHeadElement = document.getElementById("joystick-head");
+const noteElement = document.getElementById("note"); // Note element for instructions and game won, game failed texts
 
-// Angle between the two points
-const getAngle = (p1, p2) => {
-  let angle = Math.atan((p2.y - p1.y) / (p2.x - p1.x));
-  if (p2.x - p1.x < 0) angle += Math.PI;
-  return angle;
-};
+// realtime database
+const playerUid = 'player' + Math.round(Math.random() * 1000000);
+const playersRef = firebase.database().ref('/players');
 
-// The closest a ball and a wall cap can be
-const closestItCanBe = (cap, ball) => {
-  let angle = getAngle(cap, ball);
+let hardMode = false;
+let previousTimestamp;
+let gameInProgress;
+let mouseStartX;
+let mouseStartY;
+let accelerationX;
+let accelerationY;
+let frictionX;
+let frictionY;
 
-  const deltaX = Math.cos(angle) * (wallW / 2 + ballSize / 2);
-  const deltaY = Math.sin(angle) * (wallW / 2 + ballSize / 2);
+const debugMode = false;
 
-  return { x: cap.x + deltaX, y: cap.y + deltaY };
-};
+let balls = [];
+let ballElements = [];
+let otherBalls = [];
+let otherBallElements = [];
+let holeElements = [];
+let playerList = [];
 
-// Roll the ball around the wall cap
-const rollAroundCap = (cap, ball) => {
-  // The direction the ball can't move any further because the wall holds it back
-  let impactAngle = getAngle(ball, cap);
-
-  // The direction the ball wants to move based on it's velocity
-  let heading = getAngle(
-    { x: 0, y: 0 },
-    { x: ball.velocityX, y: ball.velocityY }
-  );
-
-  // The angle between the impact direction and the ball's desired direction
-  // The smaller this angle is, the bigger the impact
-  // The closer it is to 90 degrees the smoother it gets (at 90 there would be no collision)
-  let impactHeadingAngle = impactAngle - heading;
-
-  // Velocity distance if not hit would have occurred
-  const velocityMagnitude = distance2D(
-    { x: 0, y: 0 },
-    { x: ball.velocityX, y: ball.velocityY }
-  );
-  // Velocity component diagonal to the impact
-  const velocityMagnitudeDiagonalToTheImpact =
-        Math.sin(impactHeadingAngle) * velocityMagnitude;
-
-  // How far should the ball be from the wall cap
-  const closestDistance = wallW / 2 + ballSize / 2;
-
-  const rotationAngle = Math.atan(
-    velocityMagnitudeDiagonalToTheImpact / closestDistance
-  );
-
-  const deltaFromCap = {
-    x: Math.cos(impactAngle + Math.PI - rotationAngle) * closestDistance,
-    y: Math.sin(impactAngle + Math.PI - rotationAngle) * closestDistance
-  };
-
-  const x = ball.x;
-  const y = ball.y;
-  const velocityX = ball.x - (cap.x + deltaFromCap.x);
-  const velocityY = ball.y - (cap.y + deltaFromCap.y);
-  const nextX = x + velocityX;
-  const nextY = y + velocityY;
-
-  return { x, y, velocityX, velocityY, nextX, nextY };
-};
-
-// Decreases the absolute value of a number but keeps it's sign, doesn't go below abs 0
-const slow = (number, difference) => {
-  if (Math.abs(number) <= difference) return 0;
-  if (number > difference) return number - difference;
-  return number + difference;
-};
+// const FPS = (debugMode === true) ?  15 : 45;
+const FPS = 45; // Frame rate
 
 function newPostForCurrentUser(title, text) {
   // [START single_value_read]
@@ -88,236 +47,35 @@ function newPostForCurrentUser(title, text) {
   });
 }
 
-function writeNewPlayer(uid, username, picture) {
-  // A post entry.
-  // var postData = {
-  //   author: username,
-  //   uid: uid,
-  //   authorPic: picture
-  // };
-
-  // Get a key for a new Post.
-  // var newPostKey = firebase.database().ref().child('posts').push().key;
-
-  // Write the new post's data simultaneously in the posts list and the user's post list.
-  var updates = {};
-  // updates['/players/' + uid + '/' + 'balls'] = postData;
-  updates['/players/' + uid + '/' + 'balls'] = [
-    {column: 0, row: 0},
-    {column: 9, row: 0},
-    {column: 0, row: 8},
-    {column: 0, row: 8}
-  ];
-
-  return firebase.database().ref().update(updates);
-}
-
 function otherPlayers() {
-  // Other players
-  playersRef.on('value', (snapshot) => {
+  // Move other players on the UI
+  // playersRef.on('value', (snapshot) => {
+  playersRef.once('value', (snapshot) => {
     let players = snapshot.val();
 
-    // players.forEach((uuid) => {
-    for (var uuid in players) {
-      if (uuid !== playerUid) {
-        // No exists player
-        if (playerList.indexOf(uuid) == -1) {
-          playerList.push(playerUid);
+    if (players === null) {return;}
 
-          otherBalls.push(
-            { column: 0, row: 0 },
-            { column: 9, row: 0 },
-            { column: 0, row: 8 },
-            { column: 9, row: 8 }
-          );
-          otherBalls.map((ball) => ({
-            x: ball.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
-            y: ball.row * (wallW + pathW) + (wallW / 2 + pathW / 2),
-            velocityX: 0,
-            velocityY: 0
-          }));
-          otherBalls.forEach(({ x, y }) => {
-            const otherBall = document.createElement("div");
-            otherBall.setAttribute("class", "other-ball");
-            otherBall.style.cssText = `left: ${x}px; top: ${y}px; `;
+    // for (let i = 0; Object.keys(players).length; i++) {
+    Object.keys(players).forEach((player, index) => {
+      if (players[player].id === playerUid) {return;}
 
-            mazeElement.appendChild(otherBall);
-            otherBallElements.push(otherBall);
-          });
-        }
+      // if (index > otherBallElements.length){
+      if (index > Object.keys(otherBallElements).length) {
+        const otherBall = document.createElement("div");
+        otherBall.setAttribute("class", "other-ball");
+        otherBall.style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
 
-        // No player
-        playerList.forEach((player) => {
-          if (!players[player]) {
-            playerList = playerList.filter(n => n !== player);
-          }
-        });
+        mazeElement.appendChild(otherBall);
+        otherBallElements.push(otherBall);
       }
-    }
+      if (otherBallElements[index] === undefined) {return;}
+
+      otherBallElements[index].style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
+    });
   });
 }
 
-const mazeElement = document.getElementById("maze");
-const joystickHeadElement = document.getElementById("joystick-head");
-const noteElement = document.getElementById("note"); // Note element for instructions and game won, game failed texts
-
-// realtime database
-const playerUid = 'player' + Math.round(Math.random() * 1000000); //'aaaa';
-const playersRef = firebase.database().ref('/players');
-// const ballsRef = firebase.database().ref('/players/' + playerUid + '/balls');
-
-let hardMode = false;
-let previousTimestamp;
-let gameInProgress;
-let mouseStartX;
-let mouseStartY;
-let accelerationX;
-let accelerationY;
-let frictionX;
-let frictionY;
-
-const pathW = 25; // Path width
-const wallW = 10; // Wall width
-const ballSize = 10; // Width and height of the ball
-const holeSize = 18;
-
-const debugMode = false;
-
-let balls = [];
-let ballElements = [];
-let otherBallElements = [];
-let holeElements = [];
-let playerList = [];
-
-// const FPS = (debugMode === true) ?  15 : 45;
-const FPS = 45; // Frame rate
-
 resetGame();
-
-let otherBalls = [];
-// otherBalls = [
-//   { column: 0, row: 0 },
-//   // { column: 9, row: 0 },
-//   // { column: 0, row: 8 },
-//   // { column: 9, row: 8 }
-// ].map((ball) => ({
-//   x: ball.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
-//   y: ball.row * (wallW + pathW) + (wallW / 2 + pathW / 2),
-//   velocityX: 0,
-//   velocityY: 0
-// }));
-
-// // Draw balls for the first time
-// otherBalls.forEach(({ x, y }) => {
-//   const otherBall = document.createElement("div");
-//   otherBall.setAttribute("class", "other-ball");
-//   otherBall.style.cssText = `left: ${x}px; top: ${y}px; `;
-
-//   mazeElement.appendChild(otherBall);
-//   otherBallElements.push(otherBall);
-// });
-
-balls.forEach(({ x, y }) => {
-  const ball = document.createElement("div");
-  ball.setAttribute("class", "ball");
-  ball.style.cssText = `left: ${x}px; top: ${y}px; `;
-
-  mazeElement.appendChild(ball);
-  ballElements.push(ball);
-});
-
-// Wall metadata
-const walls = [
-  // Border
-  { column: 0, row: 0, horizontal: true, length: 10 },
-  { column: 0, row: 0, horizontal: false, length: 9 },
-  { column: 0, row: 9, horizontal: true, length: 10 },
-  { column: 10, row: 0, horizontal: false, length: 9 },
-
-  // Horizontal lines starting in 1st column
-  { column: 0, row: 6, horizontal: true, length: 1 },
-  { column: 0, row: 8, horizontal: true, length: 1 },
-
-  // Horizontal lines starting in 2nd column
-  { column: 1, row: 1, horizontal: true, length: 2 },
-  { column: 1, row: 7, horizontal: true, length: 1 },
-
-  // Horizontal lines starting in 3rd column
-  { column: 2, row: 2, horizontal: true, length: 2 },
-  { column: 2, row: 4, horizontal: true, length: 1 },
-  { column: 2, row: 5, horizontal: true, length: 1 },
-  { column: 2, row: 6, horizontal: true, length: 1 },
-
-  // Horizontal lines starting in 4th column
-  { column: 3, row: 3, horizontal: true, length: 1 },
-  { column: 3, row: 8, horizontal: true, length: 3 },
-
-  // Horizontal lines starting in 5th column
-  { column: 4, row: 6, horizontal: true, length: 1 },
-
-  // Horizontal lines starting in 6th column
-  { column: 5, row: 2, horizontal: true, length: 2 },
-  { column: 5, row: 7, horizontal: true, length: 1 },
-
-  // Horizontal lines starting in 7th column
-  { column: 6, row: 1, horizontal: true, length: 1 },
-  { column: 6, row: 6, horizontal: true, length: 2 },
-
-  // Horizontal lines starting in 8th column
-  { column: 7, row: 3, horizontal: true, length: 2 },
-  { column: 7, row: 7, horizontal: true, length: 2 },
-
-  // Horizontal lines starting in 9th column
-  { column: 8, row: 1, horizontal: true, length: 1 },
-  { column: 8, row: 2, horizontal: true, length: 1 },
-  { column: 8, row: 3, horizontal: true, length: 1 },
-  { column: 8, row: 4, horizontal: true, length: 2 },
-  { column: 8, row: 8, horizontal: true, length: 2 },
-
-  // Vertical lines after the 1st column
-  { column: 1, row: 1, horizontal: false, length: 2 },
-  { column: 1, row: 4, horizontal: false, length: 2 },
-
-  // Vertical lines after the 2nd column
-  { column: 2, row: 2, horizontal: false, length: 2 },
-  { column: 2, row: 5, horizontal: false, length: 1 },
-  { column: 2, row: 7, horizontal: false, length: 2 },
-
-  // Vertical lines after the 3rd column
-  { column: 3, row: 0, horizontal: false, length: 1 },
-  { column: 3, row: 4, horizontal: false, length: 1 },
-  { column: 3, row: 6, horizontal: false, length: 2 },
-
-  // Vertical lines after the 4th column
-  { column: 4, row: 1, horizontal: false, length: 2 },
-  { column: 4, row: 6, horizontal: false, length: 1 },
-
-  // Vertical lines after the 5th column
-  { column: 5, row: 0, horizontal: false, length: 2 },
-  { column: 5, row: 6, horizontal: false, length: 1 },
-  { column: 5, row: 8, horizontal: false, length: 1 },
-
-  // Vertical lines after the 6th column
-  { column: 6, row: 4, horizontal: false, length: 1 },
-  { column: 6, row: 6, horizontal: false, length: 1 },
-
-  // Vertical lines after the 7th column
-  { column: 7, row: 1, horizontal: false, length: 4 },
-  { column: 7, row: 7, horizontal: false, length: 2 },
-
-  // Vertical lines after the 8th column
-  { column: 8, row: 2, horizontal: false, length: 1 },
-  { column: 8, row: 4, horizontal: false, length: 2 },
-
-  // Vertical lines after the 9th column
-  { column: 9, row: 1, horizontal: false, length: 1 },
-  { column: 9, row: 5, horizontal: false, length: 2 }
-].map((wall) => ({
-  x: wall.column * (pathW + wallW),
-  y: wall.row * (pathW + wallW),
-  horizontal: wall.horizontal,
-  length: wall.length * (pathW + wallW)
-}));
 
 // Draw walls
 walls.forEach(({ x, y, horizontal, length }) => {
@@ -334,19 +92,15 @@ walls.forEach(({ x, y, horizontal, length }) => {
   mazeElement.appendChild(wall);
 });
 
-const holes = [
-  { column: 0, row: 5 },
-  { column: 2, row: 0 },
-  { column: 2, row: 4 },
-  { column: 4, row: 6 },
-  { column: 6, row: 2 },
-  { column: 6, row: 8 },
-  { column: 8, row: 1 },
-  { column: 8, row: 2 }
-].map((hole) => ({
-  x: hole.column * (wallW + pathW) + (wallW / 2 + pathW / 2),
-  y: hole.row * (wallW + pathW) + (wallW / 2 + pathW / 2)
-}));
+balls.forEach(({ x, y }) => {
+  const ball = document.createElement("div");
+  ball.setAttribute("class", "ball");
+  ball.style.cssText = `left: ${x}px; top: ${y}px; `;
+
+  mazeElement.appendChild(ball);
+  ballElements.push(ball);
+});
+
 
 joystickHeadElement.addEventListener("mousedown", function (event) {
   if (!gameInProgress) {
@@ -419,6 +173,199 @@ window.addEventListener("keydown", function (event) {
   }
 });
 
+
+function CollisionWall(ball) {
+  walls.forEach((wall, wi) => {
+    if (wall.horizontal) {
+      // Horizontal wall
+
+      if (
+        ball.nextY + ballSize / 2 >= wall.y - wallW / 2 &&
+          ball.nextY - ballSize / 2 <= wall.y + wallW / 2
+      ) {
+        // Ball got within the strip of the wall
+        // (not necessarily hit it, could be before or after)
+
+        const wallStart = {
+          x: wall.x,
+          y: wall.y
+        };
+        const wallEnd = {
+          x: wall.x + wall.length,
+          y: wall.y
+        };
+
+        if (
+          ball.nextX + ballSize / 2 >= wallStart.x - wallW / 2 &&
+            ball.nextX < wallStart.x
+        ) {
+          // Ball might hit the left cap of a horizontal wall
+          const distance = distance2D(wallStart, {
+            x: ball.nextX,
+            y: ball.nextY
+          });
+          if (distance < ballSize / 2 + wallW / 2) {
+            if (debugMode && wi > 4)
+              console.warn("too close h head", distance, ball);
+
+            // Ball hits the left cap of a horizontal wall
+            const closest = closestItCanBe(wallStart, {
+              x: ball.nextX,
+              y: ball.nextY
+            });
+            const rolled = rollAroundCap(wallStart, {
+              x: closest.x,
+              y: closest.y,
+              velocityX: ball.velocityX,
+              velocityY: ball.velocityY
+            });
+
+            Object.assign(ball, rolled);
+          }
+        }
+
+        if (
+          ball.nextX - ballSize / 2 <= wallEnd.x + wallW / 2 &&
+            ball.nextX > wallEnd.x
+        ) {
+          // Ball might hit the right cap of a horizontal wall
+          const distance = distance2D(wallEnd, {
+            x: ball.nextX,
+            y: ball.nextY
+          });
+          if (distance < ballSize / 2 + wallW / 2) {
+            if (debugMode && wi > 4)
+              console.warn("too close h tail", distance, ball);
+
+            // Ball hits the right cap of a horizontal wall
+            const closest = closestItCanBe(wallEnd, {
+              x: ball.nextX,
+              y: ball.nextY
+            });
+            const rolled = rollAroundCap(wallEnd, {
+              x: closest.x,
+              y: closest.y,
+              velocityX: ball.velocityX,
+              velocityY: ball.velocityY
+            });
+
+            Object.assign(ball, rolled);
+          }
+        }
+
+        if (ball.nextX >= wallStart.x && ball.nextX <= wallEnd.x) {
+          // The ball got inside the main body of the wall
+          if (ball.nextY < wall.y) {
+            // Hit horizontal wall from top
+            ball.nextY = wall.y - wallW / 2 - ballSize / 2;
+          } else {
+            // Hit horizontal wall from bottom
+            ball.nextY = wall.y + wallW / 2 + ballSize / 2;
+          }
+          ball.y = ball.nextY;
+          ball.velocityY = -ball.velocityY / 3;
+
+          if (debugMode && wi > 4)
+            console.error("crossing h line, HIT", ball);
+        }
+      }
+    } else {
+      // Vertical wall
+
+      if (
+        ball.nextX + ballSize / 2 >= wall.x - wallW / 2 &&
+          ball.nextX - ballSize / 2 <= wall.x + wallW / 2
+      ) {
+        // Ball got within the strip of the wall
+        // (not necessarily hit it, could be before or after)
+
+        const wallStart = {
+          x: wall.x,
+          y: wall.y
+        };
+        const wallEnd = {
+          x: wall.x,
+          y: wall.y + wall.length
+        };
+
+        if (
+          ball.nextY + ballSize / 2 >= wallStart.y - wallW / 2 &&
+            ball.nextY < wallStart.y
+        ) {
+          // Ball might hit the top cap of a horizontal wall
+          const distance = distance2D(wallStart, {
+            x: ball.nextX,
+            y: ball.nextY
+          });
+          if (distance < ballSize / 2 + wallW / 2) {
+            if (debugMode && wi > 4)
+              console.warn("too close v head", distance, ball);
+
+            // Ball hits the left cap of a horizontal wall
+            const closest = closestItCanBe(wallStart, {
+              x: ball.nextX,
+              y: ball.nextY
+            });
+            const rolled = rollAroundCap(wallStart, {
+              x: closest.x,
+              y: closest.y,
+              velocityX: ball.velocityX,
+              velocityY: ball.velocityY
+            });
+
+            Object.assign(ball, rolled);
+          }
+        }
+
+        if (
+          ball.nextY - ballSize / 2 <= wallEnd.y + wallW / 2 &&
+            ball.nextY > wallEnd.y
+        ) {
+          // Ball might hit the bottom cap of a horizontal wall
+          const distance = distance2D(wallEnd, {
+            x: ball.nextX,
+            y: ball.nextY
+          });
+          if (distance < ballSize / 2 + wallW / 2) {
+            if (debugMode && wi > 4)
+              console.warn("too close v tail", distance, ball);
+
+            // Ball hits the right cap of a horizontal wall
+            const closest = closestItCanBe(wallEnd, {
+              x: ball.nextX,
+              y: ball.nextY
+            });
+            const rolled = rollAroundCap(wallEnd, {
+              x: closest.x,
+              y: closest.y,
+              velocityX: ball.velocityX,
+              velocityY: ball.velocityY
+            });
+
+            Object.assign(ball, rolled);
+          }
+        }
+
+        if (ball.nextY >= wallStart.y && ball.nextY <= wallEnd.y) {
+          // The ball got inside the main body of the wall
+          if (ball.nextX < wall.x) {
+            // Hit vertical wall from left
+            ball.nextX = wall.x - wallW / 2 - ballSize / 2;
+          } else {
+            // Hit vertical wall from right
+            ball.nextX = wall.x + wallW / 2 + ballSize / 2;
+          }
+          ball.x = ball.nextX;
+          ball.velocityX = -ball.velocityX / 3;
+
+          if (debugMode && wi > 4)
+            console.error("crossing v line, HIT", ball);
+        }
+      }
+    }
+  });
+}
+
 function resetGame() {
   previousTimestamp = undefined;
   gameInProgress = false;
@@ -450,13 +397,15 @@ function resetGame() {
   noteElement.style.opacity = 1;
 
   // Delete player from DB
-  balls.forEach(({id}, index) => {
-    playersRef.child(id).remove().then(() => {
-      console.log(`remove player ${id}`);
-    }).catch(e => {
-      console.log(e);
+  if (balls) {
+    balls.forEach(({id}, index) => {
+      playersRef.child(id).remove().then(() => {
+        console.log(`remove player ${id}`);
+      }).catch(e => {
+        console.log(e);
+      });
     });
-  });
+  }
 
   // Reset
   balls = [
@@ -479,14 +428,6 @@ function resetGame() {
     });
   }
 
-  // otherPlayers()
-
-  // playersRef.child(playerUid).remove().then(() => {
-  //   console.log(`remove ${playerUid}`);
-  // }).catch(e => {
-  //   console.log(e);
-  // });
-
   // Remove previous hole elements
   holeElements.forEach((holeElement) => {
     mazeElement.removeChild(holeElement);
@@ -506,50 +447,34 @@ function resetGame() {
   }
 }
 
+const i = false; //true;
 function main(timestamp) {
-  // It is possible to reset the game mid-game. This case the look should stop
-  if (!gameInProgress) return;
+  try {
+    // It is possible to reset the game mid-game. This case the look should stop
+    if (!gameInProgress) return;
 
-  if (previousTimestamp === undefined) {
-    previousTimestamp = timestamp;
+    if (previousTimestamp === undefined) {
+      previousTimestamp = timestamp;
 
-    // setTimeout(() => {
-    window.requestAnimationFrame(main);
-    // }, 1000 / FPS);
-    return;
+      window.requestAnimationFrame(main);
+      return;
+    }
+
+    otherPlayers();
+
+    LocalPlayer(timestamp);
+    if (i === true) {throw new Error("exit")}
+  } catch(e) {
+    console.error(e.message);
   }
+}
 
+function LocalPlayer(timestamp) {
   const maxVelocity = (debugMode === true) ? 7.5 : 1.5;
 
   // Time passed since last cycle divided by 16
   // This function gets called every 16 ms on average so dividing by 16 will result in 1
   const timeElapsed = (timestamp - previousTimestamp) / 16;
-
-  // Move other players on the UI
-  playersRef.on('value', (snapshot) => {
-    let players = snapshot.val();
-
-    if (players === null) {return;}
-    // for (let i = 0; Object.keys(players).length; i++) {
-    Object.keys(players).forEach((player, index) => {
-      if (players[player].id === playerUid) {return;}
-
-      // if (index > otherBallElements.length){
-      if (index > Object.keys(otherBallElements).length) {
-        const otherBall = document.createElement("div");
-        otherBall.setAttribute("class", "other-ball");
-        otherBall.style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
-
-        mazeElement.appendChild(otherBall);
-        otherBallElements.push(otherBall);
-      }
-      if (otherBallElements[index] === undefined) {return;}
-      // if (parseInt(timestamp) % 16 === 0) {
-      otherBallElements[index].style.cssText = `left: ${players[player].x}px; top: ${players[player].y}px; `;
-      // }
-    });
-  });
-
 
   try {
     // If mouse didn't move yet don't do anything
@@ -590,195 +515,7 @@ function main(timestamp) {
 
         if (debugMode) console.log("tick", ball);
 
-        walls.forEach((wall, wi) => {
-          if (wall.horizontal) {
-            // Horizontal wall
-
-            if (
-              ball.nextY + ballSize / 2 >= wall.y - wallW / 2 &&
-                ball.nextY - ballSize / 2 <= wall.y + wallW / 2
-            ) {
-              // Ball got within the strip of the wall
-              // (not necessarily hit it, could be before or after)
-
-              const wallStart = {
-                x: wall.x,
-                y: wall.y
-              };
-              const wallEnd = {
-                x: wall.x + wall.length,
-                y: wall.y
-              };
-
-              if (
-                ball.nextX + ballSize / 2 >= wallStart.x - wallW / 2 &&
-                  ball.nextX < wallStart.x
-              ) {
-                // Ball might hit the left cap of a horizontal wall
-                const distance = distance2D(wallStart, {
-                  x: ball.nextX,
-                  y: ball.nextY
-                });
-                if (distance < ballSize / 2 + wallW / 2) {
-                  if (debugMode && wi > 4)
-                    console.warn("too close h head", distance, ball);
-
-                  // Ball hits the left cap of a horizontal wall
-                  const closest = closestItCanBe(wallStart, {
-                    x: ball.nextX,
-                    y: ball.nextY
-                  });
-                  const rolled = rollAroundCap(wallStart, {
-                    x: closest.x,
-                    y: closest.y,
-                    velocityX: ball.velocityX,
-                    velocityY: ball.velocityY
-                  });
-
-                  Object.assign(ball, rolled);
-                }
-              }
-
-              if (
-                ball.nextX - ballSize / 2 <= wallEnd.x + wallW / 2 &&
-                  ball.nextX > wallEnd.x
-              ) {
-                // Ball might hit the right cap of a horizontal wall
-                const distance = distance2D(wallEnd, {
-                  x: ball.nextX,
-                  y: ball.nextY
-                });
-                if (distance < ballSize / 2 + wallW / 2) {
-                  if (debugMode && wi > 4)
-                    console.warn("too close h tail", distance, ball);
-
-                  // Ball hits the right cap of a horizontal wall
-                  const closest = closestItCanBe(wallEnd, {
-                    x: ball.nextX,
-                    y: ball.nextY
-                  });
-                  const rolled = rollAroundCap(wallEnd, {
-                    x: closest.x,
-                    y: closest.y,
-                    velocityX: ball.velocityX,
-                    velocityY: ball.velocityY
-                  });
-
-                  Object.assign(ball, rolled);
-                }
-              }
-
-              if (ball.nextX >= wallStart.x && ball.nextX <= wallEnd.x) {
-                // The ball got inside the main body of the wall
-                if (ball.nextY < wall.y) {
-                  // Hit horizontal wall from top
-                  ball.nextY = wall.y - wallW / 2 - ballSize / 2;
-                } else {
-                  // Hit horizontal wall from bottom
-                  ball.nextY = wall.y + wallW / 2 + ballSize / 2;
-                }
-                ball.y = ball.nextY;
-                ball.velocityY = -ball.velocityY / 3;
-
-                if (debugMode && wi > 4)
-                  console.error("crossing h line, HIT", ball);
-              }
-            }
-          } else {
-            // Vertical wall
-
-            if (
-              ball.nextX + ballSize / 2 >= wall.x - wallW / 2 &&
-                ball.nextX - ballSize / 2 <= wall.x + wallW / 2
-            ) {
-              // Ball got within the strip of the wall
-              // (not necessarily hit it, could be before or after)
-
-              const wallStart = {
-                x: wall.x,
-                y: wall.y
-              };
-              const wallEnd = {
-                x: wall.x,
-                y: wall.y + wall.length
-              };
-
-              if (
-                ball.nextY + ballSize / 2 >= wallStart.y - wallW / 2 &&
-                  ball.nextY < wallStart.y
-              ) {
-                // Ball might hit the top cap of a horizontal wall
-                const distance = distance2D(wallStart, {
-                  x: ball.nextX,
-                  y: ball.nextY
-                });
-                if (distance < ballSize / 2 + wallW / 2) {
-                  if (debugMode && wi > 4)
-                    console.warn("too close v head", distance, ball);
-
-                  // Ball hits the left cap of a horizontal wall
-                  const closest = closestItCanBe(wallStart, {
-                    x: ball.nextX,
-                    y: ball.nextY
-                  });
-                  const rolled = rollAroundCap(wallStart, {
-                    x: closest.x,
-                    y: closest.y,
-                    velocityX: ball.velocityX,
-                    velocityY: ball.velocityY
-                  });
-
-                  Object.assign(ball, rolled);
-                }
-              }
-
-              if (
-                ball.nextY - ballSize / 2 <= wallEnd.y + wallW / 2 &&
-                  ball.nextY > wallEnd.y
-              ) {
-                // Ball might hit the bottom cap of a horizontal wall
-                const distance = distance2D(wallEnd, {
-                  x: ball.nextX,
-                  y: ball.nextY
-                });
-                if (distance < ballSize / 2 + wallW / 2) {
-                  if (debugMode && wi > 4)
-                    console.warn("too close v tail", distance, ball);
-
-                  // Ball hits the right cap of a horizontal wall
-                  const closest = closestItCanBe(wallEnd, {
-                    x: ball.nextX,
-                    y: ball.nextY
-                  });
-                  const rolled = rollAroundCap(wallEnd, {
-                    x: closest.x,
-                    y: closest.y,
-                    velocityX: ball.velocityX,
-                    velocityY: ball.velocityY
-                  });
-
-                  Object.assign(ball, rolled);
-                }
-              }
-
-              if (ball.nextY >= wallStart.y && ball.nextY <= wallEnd.y) {
-                // The ball got inside the main body of the wall
-                if (ball.nextX < wall.x) {
-                  // Hit vertical wall from left
-                  ball.nextX = wall.x - wallW / 2 - ballSize / 2;
-                } else {
-                  // Hit vertical wall from right
-                  ball.nextX = wall.x + wallW / 2 + ballSize / 2;
-                }
-                ball.x = ball.nextX;
-                ball.velocityX = -ball.velocityX / 3;
-
-                if (debugMode && wi > 4)
-                  console.error("crossing v line, HIT", ball);
-              }
-            }
-          }
-        });
+        CollisionWall(ball);
 
         // Detect is a ball fell into a hole
         if (hardMode) {
@@ -809,11 +546,6 @@ function main(timestamp) {
         });
       });
 
-      // ballsRef.transaction(function(post) {
-      // playersRef.transaction(function(post) {
-      // return balls;
-      // });
-
       // Move balls to their new position on the UI
       balls.forEach(({ x, y }, index) => {
         ballElements[index].style.cssText = `left: ${x}px; top: ${y}px; `;
@@ -828,9 +560,7 @@ function main(timestamp) {
       gameInProgress = false;
     } else {
       previousTimestamp = timestamp;
-      // setTimeout(() => {
       window.requestAnimationFrame(main);
-      // }, 1000 / FPS);
     }
   } catch (error) {
     if (error.message == "The ball fell into a hole") {
