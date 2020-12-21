@@ -4,6 +4,7 @@
     <title>Maze</title>
 
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Cache-Control" content="no-cache">
   </head>
@@ -37,13 +38,25 @@
         </div>
       </div>
     </div>
-    <script src="/__/firebase/8.1.1/firebase-app.js"></script>
-    <script src="/__/firebase/7.24.0/firebase-auth.js"></script>
-    <script src="/__/firebase/7.24.0/firebase-database.js"></script>
-    <script src="/__/firebase/7.24.0/firebase-firestore.js"></script>
+
+    <input type="button" id="btnWebPush" value="WebPushPermission">
+
+    <script src="/__/firebase/8.2.0/firebase-app.js"></script>
+    <script src="/__/firebase/8.2.0/firebase-auth.js"></script>
+    <script src="/__/firebase/8.2.0/firebase-messaging.js"></script>
+    <script src="/__/firebase/8.2.0/firebase-database.js"></script>
+    <script src="/__/firebase/8.2.0/firebase-firestore.js"></script>
     <!-- Initialize Firebase -->
     <script src="/__/firebase/init.js"></script>
-
+    <script>
+     const messaging = firebase.messaging();
+     messaging.onMessage(function(payload) {
+       console.log("Message received. ", payload);
+       alert(payload.notification.title+"\r\n"
+            +payload.notification.body+"\r\n"
+            +payload.notification.icon);
+     });
+     </script>
     <script src="app.js" type="module"></script>
   </body>
 </html>
