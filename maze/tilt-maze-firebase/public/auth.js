@@ -1,3 +1,5 @@
+import {saveMessagingDeviceToken} from "./fcm.js";
+
 function signIn() {
   const provider = new firebase.auth.GoogleAuthProvider();
   firebase.auth().signInWithPopup(provider);
@@ -38,7 +40,7 @@ function authStateObserver(user) {
     signInButtonElement.setAttribute('hidden', 'true');
 
     // We save the Firebase Messaging Device token and enable notifications.
-    // saveMessagingDeviceToken();
+    saveMessagingDeviceToken();
   } else { // User is signed out!
     // Hide user's profile and sign-out button.
     userNameElement.setAttribute('hidden', 'true');
