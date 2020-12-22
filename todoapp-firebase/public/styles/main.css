@@ -22,7 +22,8 @@ main, #messages-card {
   padding-bottom: 0;
 }
 #messages-card-container {
-  height: calc(100% - 35px);
+  /* height: calc(100% - 35px); */
+  height: 0;
   padding-bottom: 0;
 }
 #messages-card {
@@ -35,6 +36,9 @@ main, #messages-card {
 .mdl-grid {
   max-width: 1024px;
   margin: auto;
+}
+.mdl-grid.center-items {
+  justify-content: center;
 }
 .material-icons {
   font-size: 36px;

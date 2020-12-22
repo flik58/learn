@@ -7,17 +7,33 @@ export class App {
   constructor() {
     this.todoListModel = new TodoListModel();
     this.todoListView = new TodoListView();
+
+    this.db = firebase.firestore();
   }
 
   handleAdd(title) {
-    this.todoListModel.addTodo(new TodoItemModel({title, complated: false}));
+    this.db.collection("todos").add({
+      title: title,
+      complated: false,
+    }).then(function(docRef) {
+      id = docRef.id
+      console.log("Document written with ID: ", id);
+      this.todoListModel.addTodo(new TodoItemModel({id, title, complated: false}));
+    }).catch(function(error) {
+      console.error("Error adding document: ", error);
+    });
+    // this.todoListModel.addTodo(new TodoItemModel({title, complated: false}));
   }
 
   handleUpdate({id, complated}) {
+    this.db.collection('todos').doc(id).update({
+      complated: complated
+    });
     this.todoListModel.updateTodo({id, complated});
   }
 
   handleDelete({id}) {
+    this.db.collection('todos').doc(id).delete();
     this.todoListModel.deleteTodo({id});
   }
 
@@ -49,3 +65,33 @@ export class App {
     });
   }
 }
+
+
+db.collection("users").add({
+  first: "Alan",
+  middle: "Mathison",
+  last: "Turing",
+  born: 1912
+}).then(function(docRef) {
+  console.log("Document written with ID: ", docRef.id);
+}).catch(function(error) {
+  console.error("Error adding document: ", error);
+});
+
+db.collection("users").get().then((querySnapshot) => {
+  querySnapshot.forEach((doc) => {
+    console.log(`${doc.id} => ${doc.data()}`);
+  });
+});
+
+db.collection("users").where("first", "==", "Ada").get().then((querySnapshot) => {
+  querySnapshot.forEach(function(doc) {
+    doc.ref.delete();
+  });
+});
+
+db.collection("users").get().then((querySnapshot) => {
+  querySnapshot.forEach((doc) => {
+    console.log(`${doc.id} => ${doc.data()}`);
+  });
+});
