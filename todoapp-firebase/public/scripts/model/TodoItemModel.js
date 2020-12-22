@@ -1,8 +1,9 @@
 let todoIdx = 0;
 
 export class TodoItemModel {
-  constructor({title, complated}) {
-    this.id = todoIdx++;
+  constructor({id, title, complated}) {
+    // this.id = todoIdx++;
+    this.id = id;
     this.title = title;
     this.complated = complated;
   }
