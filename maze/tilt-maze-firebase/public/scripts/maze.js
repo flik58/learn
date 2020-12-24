@@ -12,7 +12,7 @@ export function maze() {
   const noteElement = document.getElementById("note"); // Note element for instructions and game won, game failed texts
 
   // realtime database
-  const playerUid = 'player' + Math.round(Math.random() * 1000000);
+  let playerUid; //  = 'player' + Math.round(Math.random() * 1000000);
   const playersRef = firebase.database().ref('/players');
 
   let hardMode = false;
@@ -99,6 +99,7 @@ export function maze() {
         animation: none;
         cursor: grabbing;
       `;
+      playerUid = firebase.auth().currentUser.uid;
     }
   });
 
@@ -382,11 +383,12 @@ export function maze() {
     }
     noteElement.style.opacity = 1;
 
-    // Delete player from DB
+    // Delete ball from DB
     if (balls) {
       balls.forEach(({id}, index) => {
         playersRef.child(id).remove().then(() => {
-          console.log(`remove player ${id}`);
+          if (debugMode) console.log(`remove ball ${id}`);
+          console.log();
         }).catch(e => {
           console.log(e);
         });
